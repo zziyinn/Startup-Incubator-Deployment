@@ -1,0 +1,59 @@
+name: 部署 Weather_todolist 到 EC2
+
+on:
+  # 监听网站仓库的变化
+  repository_dispatch:
+    types: [website-updated]  # 响应来自网站仓库的特定事件
+  # 也允许手动触发
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: '要部署的网站仓库分支'
+        required: true
+        default: 'main'
+
+jobs:
+  deploy:
+    name: 部署
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出 DevOps 仓库
+      uses: actions/checkout@v3
+      with:
+        path: devops  # 将 DevOps 仓库检出到 'devops' 子目录
+
+    - name: 检出网站仓库
+      uses: actions/checkout@v3
+      with:
+        repository: zziyinn/Weather_todolist  # 网站仓库的名称
+        path: website  # 将网站仓库检出到 'website' 子目录
+        ref: ${{ github.event.inputs.branch || 'main' }}  # 使用指定的分支或默认 main
+        token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}  # 使用访问令牌进行认证
+
+    - name: 配置 AWS 凭证
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: 创建部署包
+      run: |
+        mkdir -p build  # 创建构建目录
+        cp -r website/* build/ || true  # 复制网站文件
+        cp -r devops/scripts build/ || true  # 复制部署脚本
+        cp devops/appspec.yml build/ || true  # 复制 appspec 配置
+        cd build && zip -r ../deploy.zip * || true  # 创建 ZIP 部署包
+        
+    - name: 将构建产物上传到 S3
+      run: |
+        aws s3 cp deploy.zip s3://${{ secrets.S3_BUCKET }}/deploy-${{ github.run_number }}.zip
+        
+    - name: 创建 CodeDeploy 部署
+      run: |
+        aws deploy create-deployment \
+          --application-name my-application \  # CodeDeploy 应用名称
+          --deployment-group-name production \  # 部署组名称
+          --s3-location bucket=${{ secrets.S3_BUCKET }},bundleType=zip,key=deploy-${{ github.run_number }}.zip \
+          --file-exists-behavior OVERWRITE  # 覆盖已存在的文件
