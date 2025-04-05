@@ -13,10 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code with submodules
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
-          submodules: true
           fetch-depth: 0
       
       - name: Set up Docker Buildx
