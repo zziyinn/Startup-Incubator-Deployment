@@ -6,20 +6,18 @@ on:
     paths:
       - 'frontend/**'
       - '.github/workflows/docker-ecr-frontend.yml'
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
+      - name: Checkout code with submodules
         uses: actions/checkout@v4
         with:
           submodules: true
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+          fetch-depth: 0
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -30,20 +28,7 @@ jobs:
       
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-      
-      - name: Create ECR repository if it doesn't exist
-        run: |
-          aws ecr describe-repositories --repository-names frontend-repo || \
-          aws ecr create-repository --repository-name frontend-repo --image-scanning-configuration scanOnPush=true
-      
-      - name: Cache Docker layers
-        uses: actions/cache@v3
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-frontend-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-frontend-
+        uses: aws-actions/amazon-ecr-login@v2
       
       - name: Build, tag, and push frontend image to ECR
         working-directory: ./frontend/founder-bot
@@ -52,26 +37,25 @@ jobs:
           ECR_REPOSITORY: frontend-repo
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Build and push using Docker Buildx
-          docker buildx build \
-            --cache-from=type=local,src=/tmp/.buildx-cache \
-            --cache-to=type=local,dest=/tmp/.buildx-cache-new,mode=max \
-            --platform linux/amd64 \
-            --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-            --push \
-            .
+          # 创建临时 Dockerfile 使用 npm install 而不是 npm ci
+          cat > Dockerfile.temp << 'EOF'
+          FROM node:18-alpine as builder
+          WORKDIR /app
+          COPY . .
+          RUN npm install
+          RUN npm run build
           
-          # Move cache to prevent growing indefinitely
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          FROM nginx:alpine
+          COPY --from=builder /app/build /usr/share/nginx/html
+          EXPOSE 80
+          CMD ["nginx", "-g", "daemon off;"]
+          EOF
           
-          echo "Frontend image pushed: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-          echo "Frontend image also tagged as: $ECR_REGISTRY/$ECR_REPOSITORY:latest"
-      
-      - name: Notify success
-        if: success()
-        run: |
-          echo "✅ Frontend Docker image successfully pushed to ECR"
-          echo "Repository: frontend-repo"
-          echo "Tag: ${{ github.sha }}" 
+          # 显示临时 Dockerfile 内容
+          echo "Using the following Dockerfile:"
+          cat Dockerfile.temp
+          
+          # 使用临时 Dockerfile 构建
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -f Dockerfile.temp .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
