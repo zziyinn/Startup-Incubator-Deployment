@@ -1,15 +1,16 @@
-name: Deploy Frontend to ECR
+name: Frontend ECR Pipeline
 
 on:
   push:
     branches: [ main ]
     paths:
       - 'frontend/**'
-      - '.github/workflows/docker-ecr-frontend.yml'
+      - '.github/workflows/frontend-ecr-pipeline.yml'
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-push:
+    name: Build and Push Frontend Image
     runs-on: ubuntu-latest
     
     steps:
@@ -40,7 +41,7 @@ jobs:
       - name: Cache Docker layers
         uses: actions/cache@v3
         with:
-          path: /tmp/.buildx-cache
+          path: /tmp/.buildx-cache-frontend
           key: ${{ runner.os }}-buildx-frontend-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-buildx-frontend-
@@ -53,11 +54,11 @@ jobs:
           # Create a simple package.json
           cat > package.json << 'EOF'
           {
-            "name": "temp-frontend-app",
+            "name": "startup-incubator-frontend",
             "version": "1.0.0",
             "private": true,
             "scripts": {
-              "build": "mkdir -p build && echo '<html><body><h1>Temporary Frontend App</h1><p>This is a placeholder.</p></body></html>' > build/index.html"
+              "build": "mkdir -p build && echo '<html><body><h1>Startup Incubator</h1><p>Frontend Placeholder</p></body></html>' > build/index.html"
             },
             "dependencies": {}
           }
@@ -86,23 +87,19 @@ jobs:
           ECR_REPOSITORY: frontend-repo
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # 显示 Dockerfile 内容
-          echo "Using the following Dockerfile:"
-          cat Dockerfile
-          
-          # 使用 Docker Buildx 构建和推送
+          # Build and push using Docker Buildx
           docker buildx build \
-            --cache-from=type=local,src=/tmp/.buildx-cache \
-            --cache-to=type=local,dest=/tmp/.buildx-cache-new,mode=max \
+            --cache-from=type=local,src=/tmp/.buildx-cache-frontend \
+            --cache-to=type=local,dest=/tmp/.buildx-cache-frontend-new,mode=max \
             --platform linux/amd64 \
             --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
             --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
             --push \
             .
           
-          # 移动缓存以防止无限增长
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          # Move cache to prevent growing indefinitely
+          rm -rf /tmp/.buildx-cache-frontend
+          mv /tmp/.buildx-cache-frontend-new /tmp/.buildx-cache-frontend
           
           echo "Frontend image pushed: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           echo "Frontend image also tagged as: $ECR_REGISTRY/$ECR_REPOSITORY:latest"
@@ -112,4 +109,4 @@ jobs:
         run: |
           echo "✅ Frontend Docker image successfully pushed to ECR"
           echo "Repository: frontend-repo"
-          echo "Tag: ${{ github.sha }}"
+          echo "Tag: ${{ github.sha }}" 
