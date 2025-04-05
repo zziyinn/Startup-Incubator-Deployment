@@ -1,79 +1,98 @@
 # Startup Incubator Deployment
 
-本项目包含前端和后端应用程序的 Docker 容器化配置，使用 GitHub Actions 自动构建 Docker 镜像并推送到 Amazon ECR。
+This project contains Docker containerization configurations for frontend and backend applications, using GitHub Actions to automatically build Docker images and push them to Amazon ECR.
 
-## 项目结构
+## Project Structure
 
 ```
 your-project/
 │
 ├── .github/
 │   └── workflows/
-│       ├── docker-ecr-frontend.yml   # 前端 GitHub Actions 工作流配置
-│       └── docker-ecr-backend.yml    # 后端 GitHub Actions 工作流配置
+│       ├── frontend-ecr-pipeline.yml   # Frontend GitHub Actions workflow configuration
+│       └── backend-ecr-pipeline.yml    # Backend GitHub Actions workflow configuration
 │
-├── frontend/                         # 前端应用源代码
+├── frontend/                           # Frontend application source code
 │   └── founder-bot/
-│       ├── Dockerfile                # 前端 Docker 镜像构建配置
-│       ├── .dockerignore             # 前端 Docker 构建忽略文件
-│       └── ...                       # 其他前端源代码文件
+│       ├── Dockerfile                  # Frontend Docker image build configuration
+│       ├── .dockerignore               # Frontend Docker build ignore file
+│       └── ...                         # Other frontend source code files
 │
-├── backend/                          # 后端应用源代码
+├── backend/                            # Backend application source code
 │   └── founder-bot-backend/
-│       ├── Dockerfile                # 后端 Docker 镜像构建配置
-│       ├── requirements.txt          # Python 依赖
-│       └── ...                       # 其他后端源代码文件
+│       ├── Dockerfile                  # Backend Docker image build configuration
+│       ├── requirements.txt            # Python dependencies
+│       └── ...                         # Other backend source code files
 │
-└── README.md                         # 项目说明文档
+├── terraform/                          # Infrastructure as Code
+│   ├── modules/                        # Reusable Terraform modules
+│   │   ├── ec2/                        # EC2 instance module
+│   │   ├── security_group/             # Security group module
+│   │   └── iam/                        # IAM role and policy module
+│   ├── environments/
+│   │   └── dev/                        # Development environment configuration
+│   └── README.md                       # Terraform documentation
+│
+└── README.md                           # Project documentation
 ```
 
-## 配置说明
+## Configuration Details
 
-### GitHub Actions 工作流
+### GitHub Actions Workflows
 
-本项目配置了两个独立的 GitHub Actions 工作流：
+This project configures two independent GitHub Actions workflows:
 
-1. **前端工作流** (`.github/workflows/docker-ecr-frontend.yml`)
-   - 当 `frontend` 目录中的代码发生变化时触发
-   - 构建前端 Docker 镜像并推送到 ECR 仓库 `frontend-repo`
-   - 使用 Node.js 构建应用程序并使用 Nginx 作为 Web 服务器
+1. **Frontend Workflow** (`.github/workflows/frontend-ecr-pipeline.yml`)
+   - Triggered when code in the `frontend` directory changes
+   - Builds the frontend Docker image and pushes it to the ECR repository `frontend-repo`
+   - Uses Node.js to build the application with Nginx as the web server
 
-2. **后端工作流** (`.github/workflows/docker-ecr-backend.yml`)
-   - 当 `backend` 目录中的代码发生变化时触发
-   - 构建后端 Docker 镜像并推送到 ECR 仓库 `backend-repo`
-   - 使用 Python 运行后端服务
+2. **Backend Workflow** (`.github/workflows/backend-ecr-pipeline.yml`)
+   - Triggered when code in the `backend` directory changes
+   - Builds the backend Docker image and pushes it to the ECR repository `backend-repo`
+   - Uses Python to run the backend service
 
-### 优化特性
+### Optimization Features
 
-两个工作流都包含以下优化特性：
+Both workflows include the following optimization features:
 
-- **Docker Buildx**：用于更高效的构建
-- **层缓存**：加速后续构建
-- **多架构支持**：支持 linux/amd64 架构
-- **自动创建 ECR 仓库**：如果仓库不存在会自动创建
-- **多标签**：每个镜像同时使用 commit SHA 和 `latest` 标签
+- **Docker Buildx**: For more efficient builds
+- **Layer Caching**: To speed up subsequent builds
+- **Multi-architecture Support**: Compatible with linux/amd64 architecture
+- **Automatic ECR Repository Creation**: Creates repositories automatically if they don't exist
+- **Multiple Tags**: Each image uses both the commit SHA and `latest` tags
 
-### 前提条件
+### Infrastructure as Code
 
-- AWS 账户，具有 ECR 访问权限
-- GitHub 仓库
-- 本地安装 Docker 用于测试
+The project uses Terraform to automate the deployment of AWS infrastructure:
 
-### GitHub Secrets 配置
+- **EC2 Instance**: Hosts both frontend and backend applications
+- **Security Groups**: Control network access to the instance
+- **IAM Roles**: Provide necessary permissions for ECR access
+- **Docker Compose**: Automatically pulls and runs the application containers
 
-在 GitHub 仓库中配置以下 Secrets：
+### Prerequisites
 
-- `AWS_ACCESS_KEY_ID`: 您的 AWS 访问密钥
-- `AWS_SECRET_ACCESS_KEY`: 您的 AWS 秘密访问密钥
-- `AWS_REGION`: AWS 区域（例如 `us-east-1`、`ap-northeast-1` 等）
+- AWS account with ECR access permissions
+- GitHub repository
+- Docker installed locally for testing
+- Terraform v1.0.0 or later for infrastructure deployment
 
-## 本地测试
+### GitHub Secrets Configuration
 
-### 测试前端 Docker 镜像
+Configure the following Secrets in your GitHub repository:
+
+- `AWS_ACCESS_KEY_ID`: Your AWS access key
+- `AWS_SECRET_ACCESS_KEY`: Your AWS secret access key
+- `AWS_REGION`: AWS region (e.g., `us-east-1`, `ap-northeast-1`, etc.)
+
+## Local Testing
+
+### Testing the Frontend Docker Image
 
 ```bash
 cd frontend/founder-bot
-# 使用工作流中相同的 Dockerfile 配置
+# Use the same Dockerfile configuration as in the workflow
 cat > Dockerfile.local << 'EOF'
 FROM node:18-alpine as builder
 WORKDIR /app
@@ -91,9 +110,9 @@ docker build -t frontend-app -f Dockerfile.local .
 docker run -p 80:80 frontend-app
 ```
 
-访问 http://localhost 查看前端应用
+Visit http://localhost to view the frontend application
 
-### 测试后端 Docker 镜像
+### Testing the Backend Docker Image
 
 ```bash
 cd backend/founder-bot-backend
@@ -101,29 +120,50 @@ docker build -t backend-app .
 docker run -p 5000:5000 backend-app
 ```
 
-访问 http://localhost:5000 测试后端 API
+Visit http://localhost:5000 to test the backend API
 
-## 部署流程
+## Deployment Process
 
-1. 推送代码到 GitHub 仓库的 `main` 分支
-2. GitHub Actions 工作流会自动：
-   - 构建 Docker 镜像
-   - 推送到 Amazon ECR
-   - 使用 commit SHA 和 'latest' 标签
+1. Push code to the `main` branch of your GitHub repository
+2. GitHub Actions workflows will automatically:
+   - Build Docker images
+   - Push them to Amazon ECR
+   - Tag them with both commit SHA and 'latest'
 
-## 手动触发工作流
+3. For infrastructure deployment:
+   ```bash
+   cd terraform/environments/dev
+   terraform init
+   terraform apply
+   ```
 
-如果需要手动触发工作流，可以在 GitHub 仓库的 Actions 标签页中选择相应的工作流，点击 "Run workflow" 按钮。
+## Manually Triggering Workflows
 
-## 故障排除
+If you need to manually trigger the workflows, you can select the appropriate workflow in the Actions tab of your GitHub repository and click the "Run workflow" button.
 
-如果构建失败，请检查：
+## Troubleshooting
 
-1. **GitHub Secrets**: 确保所有必需的 AWS 凭证已正确配置
-2. **IAM 权限**: 确保 IAM 用户有足够的 ECR 权限
-3. **依赖项**: 前端 `package.json` 和后端 `requirements.txt` 中的依赖是否正确
-4. **工作流日志**: 查看 GitHub Actions 日志获取详细错误信息
+If the build fails, check:
 
-## 许可证
+1. **GitHub Secrets**: Ensure all required AWS credentials are correctly configured
+2. **IAM Permissions**: Verify that the IAM user has sufficient ECR permissions
+3. **Dependencies**: Check if dependencies in frontend `package.json` and backend `requirements.txt` are correct
+4. **Workflow Logs**: Examine GitHub Actions logs for detailed error information
+5. **Terraform State**: For infrastructure issues, check the Terraform state and error messages
 
-[Your license information]
+## License
+
+MIT License
+
+## Updates
+
+### v1.0.0 (2024-04-05)
+- Initial release with Docker containerization for frontend and backend
+- Added GitHub Actions workflows for ECR deployment
+- Created temporary frontend and backend applications
+
+### v1.1.0 (2024-04-05)
+- Added Terraform infrastructure as code
+- Created EC2, Security Group, and IAM modules
+- Implemented automatic deployment of containerized applications
+- Translated documentation to English
