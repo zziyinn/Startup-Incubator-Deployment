@@ -36,10 +36,22 @@ your-project/
 1. **前端工作流** (`.github/workflows/docker-ecr-frontend.yml`)
    - 当 `frontend` 目录中的代码发生变化时触发
    - 构建前端 Docker 镜像并推送到 ECR 仓库 `frontend-repo`
+   - 使用 Node.js 构建应用程序并使用 Nginx 作为 Web 服务器
 
 2. **后端工作流** (`.github/workflows/docker-ecr-backend.yml`)
    - 当 `backend` 目录中的代码发生变化时触发
    - 构建后端 Docker 镜像并推送到 ECR 仓库 `backend-repo`
+   - 使用 Python 运行后端服务
+
+### 优化特性
+
+两个工作流都包含以下优化特性：
+
+- **Docker Buildx**：用于更高效的构建
+- **层缓存**：加速后续构建
+- **多架构支持**：支持 linux/amd64 架构
+- **自动创建 ECR 仓库**：如果仓库不存在会自动创建
+- **多标签**：每个镜像同时使用 commit SHA 和 `latest` 标签
 
 ### 前提条件
 
@@ -61,9 +73,25 @@ your-project/
 
 ```bash
 cd frontend/founder-bot
-docker build -t frontend-app .
-docker run -p 3000:3000 frontend-app
+# 使用工作流中相同的 Dockerfile 配置
+cat > Dockerfile.local << 'EOF'
+FROM node:18-alpine as builder
+WORKDIR /app
+COPY . .
+RUN npm install
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=builder /app/build /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+EOF
+
+docker build -t frontend-app -f Dockerfile.local .
+docker run -p 80:80 frontend-app
 ```
+
+访问 http://localhost 查看前端应用
 
 ### 测试后端 Docker 镜像
 
@@ -72,6 +100,8 @@ cd backend/founder-bot-backend
 docker build -t backend-app .
 docker run -p 5000:5000 backend-app
 ```
+
+访问 http://localhost:5000 测试后端 API
 
 ## 部署流程
 
@@ -85,6 +115,15 @@ docker run -p 5000:5000 backend-app
 
 如果需要手动触发工作流，可以在 GitHub 仓库的 Actions 标签页中选择相应的工作流，点击 "Run workflow" 按钮。
 
-## License
+## 故障排除
+
+如果构建失败，请检查：
+
+1. **GitHub Secrets**: 确保所有必需的 AWS 凭证已正确配置
+2. **IAM 权限**: 确保 IAM 用户有足够的 ECR 权限
+3. **依赖项**: 前端 `package.json` 和后端 `requirements.txt` 中的依赖是否正确
+4. **工作流日志**: 查看 GitHub Actions 日志获取详细错误信息
+
+## 许可证
 
 [Your license information]

@@ -19,6 +19,9 @@ jobs:
           submodules: true
           fetch-depth: 0
       
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -29,6 +32,19 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Create ECR repository if it doesn't exist
+        run: |
+          aws ecr describe-repositories --repository-names frontend-repo || \
+          aws ecr create-repository --repository-name frontend-repo --image-scanning-configuration scanOnPush=true
+      
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-frontend-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-frontend-
       
       - name: Build, tag, and push frontend image to ECR
         working-directory: ./frontend/founder-bot
@@ -55,7 +71,27 @@ jobs:
           echo "Using the following Dockerfile:"
           cat Dockerfile.temp
           
-          # 使用临时 Dockerfile 构建
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -f Dockerfile.temp .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          # 使用 Docker Buildx 构建和推送
+          docker buildx build \
+            --cache-from=type=local,src=/tmp/.buildx-cache \
+            --cache-to=type=local,dest=/tmp/.buildx-cache-new,mode=max \
+            --platform linux/amd64 \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            --push \
+            -f Dockerfile.temp \
+            .
+          
+          # 移动缓存以防止无限增长
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          
+          echo "Frontend image pushed: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "Frontend image also tagged as: $ECR_REGISTRY/$ECR_REPOSITORY:latest"
+      
+      - name: Notify success
+        if: success()
+        run: |
+          echo "✅ Frontend Docker image successfully pushed to ECR"
+          echo "Repository: frontend-repo"
+          echo "Tag: ${{ github.sha }}"
