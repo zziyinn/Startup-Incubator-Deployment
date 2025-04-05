@@ -1,63 +1,89 @@
 # Startup Incubator Deployment
 
-This repository contains a containerized application configured for continuous deployment using GitHub Actions and Amazon ECR.
+本项目包含前端和后端应用程序的 Docker 容器化配置，使用 GitHub Actions 自动构建 Docker 镜像并推送到 Amazon ECR。
 
-## Project Structure
+## 项目结构
 
 ```
 your-project/
 │
 ├── .github/
 │   └── workflows/
-│       └── ecr-push.yml       # GitHub Actions workflow configuration
+│       ├── docker-ecr-frontend.yml   # 前端 GitHub Actions 工作流配置
+│       └── docker-ecr-backend.yml    # 后端 GitHub Actions 工作流配置
 │
-├── src/                       # Application source code
-│   ├── ...
-│   └── ...
+├── frontend/                         # 前端应用源代码
+│   └── founder-bot/
+│       ├── Dockerfile                # 前端 Docker 镜像构建配置
+│       ├── .dockerignore             # 前端 Docker 构建忽略文件
+│       └── ...                       # 其他前端源代码文件
 │
-├── Dockerfile                 # Docker image build configuration
-├── .dockerignore              # Specifies files to ignore during Docker build
-├── package.json               # For Node.js projects
-├── requirements.txt           # For Python projects
-└── README.md                  # Project documentation
+├── backend/                          # 后端应用源代码
+│   └── founder-bot-backend/
+│       ├── Dockerfile                # 后端 Docker 镜像构建配置
+│       ├── requirements.txt          # Python 依赖
+│       └── ...                       # 其他后端源代码文件
+│
+└── README.md                         # 项目说明文档
 ```
 
-## Setup Instructions
+## 配置说明
 
-### Prerequisites
+### GitHub Actions 工作流
 
-- AWS account with ECR access
-- GitHub repository
-- Docker installed locally for testing
+本项目配置了两个独立的 GitHub Actions 工作流：
 
-### GitHub Secrets Configuration
+1. **前端工作流** (`.github/workflows/docker-ecr-frontend.yml`)
+   - 当 `frontend` 目录中的代码发生变化时触发
+   - 构建前端 Docker 镜像并推送到 ECR 仓库 `frontend-repo`
 
-Configure the following secrets in your GitHub repository:
+2. **后端工作流** (`.github/workflows/docker-ecr-backend.yml`)
+   - 当 `backend` 目录中的代码发生变化时触发
+   - 构建后端 Docker 镜像并推送到 ECR 仓库 `backend-repo`
 
-- `AWS_ACCESS_KEY_ID`: Your AWS access key with ECR permissions
-- `AWS_SECRET_ACCESS_KEY`: Your AWS secret access key
-- `AWS_REGION`: The AWS region where your ECR repository is located
-- `ECR_REPOSITORY`: (Optional) Name of your ECR repository (defaults to 'my-app-repo')
+### 前提条件
 
-### Deployment Process
+- AWS 账户，具有 ECR 访问权限
+- GitHub 仓库
+- 本地安装 Docker 用于测试
 
-1. Push changes to the `main` branch
-2. GitHub Actions workflow will automatically:
-   - Build the Docker image
-   - Push to Amazon ECR
-   - Tag with both commit SHA and 'latest'
+### GitHub Secrets 配置
 
-## Local Development
+在 GitHub 仓库中配置以下 Secrets：
 
-To build and test locally:
+- `AWS_ACCESS_KEY_ID`: 您的 AWS 访问密钥
+- `AWS_SECRET_ACCESS_KEY`: 您的 AWS 秘密访问密钥
+- `AWS_REGION`: AWS 区域（例如 `us-east-1`、`ap-northeast-1` 等）
+
+## 本地测试
+
+### 测试前端 Docker 镜像
 
 ```bash
-# Build the Docker image
-docker build -t my-app .
-
-# Run the container
-docker run -p 8080:8080 my-app
+cd frontend/founder-bot
+docker build -t frontend-app .
+docker run -p 3000:3000 frontend-app
 ```
+
+### 测试后端 Docker 镜像
+
+```bash
+cd backend/founder-bot-backend
+docker build -t backend-app .
+docker run -p 5000:5000 backend-app
+```
+
+## 部署流程
+
+1. 推送代码到 GitHub 仓库的 `main` 分支
+2. GitHub Actions 工作流会自动：
+   - 构建 Docker 镜像
+   - 推送到 Amazon ECR
+   - 使用 commit SHA 和 'latest' 标签
+
+## 手动触发工作流
+
+如果需要手动触发工作流，可以在 GitHub 仓库的 Actions 标签页中选择相应的工作流，点击 "Run workflow" 按钮。
 
 ## License
 
