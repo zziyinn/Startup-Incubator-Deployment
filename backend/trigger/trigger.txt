@@ -1,0 +1,3 @@
+This file is used to trigger the Backend ECR Pipeline.
+Trigger time: 2025-04-05 15:38:16
+Trigger ID: AUTO-TRIGGER-BACKEND-1743881896
