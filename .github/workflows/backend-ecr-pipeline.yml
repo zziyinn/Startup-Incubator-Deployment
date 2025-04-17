@@ -1,0 +1,131 @@
+name: Backend ECR Pipeline
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ecr-pipeline.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    name: Build and Push Backend Image
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Create ECR repository if it doesn't exist
+        run: |
+          aws ecr describe-repositories --repository-names backend-repo || \
+          aws ecr create-repository --repository-name backend-repo --image-scanning-configuration scanOnPush=true
+      
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache-backend
+          key: ${{ runner.os }}-buildx-backend-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-backend-
+      
+      - name: Setup temporary backend application
+        run: |
+          mkdir -p temp-backend-app
+          cd temp-backend-app
+          
+          # Create a simple requirements.txt
+          cat > requirements.txt << 'EOF'
+          Flask==2.3.2
+          gunicorn==21.2.0
+          python-dotenv==1.0.0
+          EOF
+          
+          # Create a simple app.py
+          cat > app.py << 'EOF'
+          from flask import Flask, jsonify
+
+          app = Flask(__name__)
+
+          @app.route('/')
+          def home():
+              return jsonify({
+                  "message": "Startup Incubator Backend API",
+                  "status": "running"
+              })
+
+          @app.route('/health')
+          def health():
+              return jsonify({
+                  "status": "healthy"
+              })
+
+          if __name__ == "__main__":
+              app.run(host="0.0.0.0", port=5000)
+          EOF
+          
+          # Create a simple Dockerfile
+          cat > Dockerfile << 'EOF'
+          FROM python:3.9-slim
+
+          WORKDIR /app
+
+          COPY requirements.txt .
+          RUN pip install --no-cache-dir -r requirements.txt
+
+          COPY . .
+
+          EXPOSE 5000
+
+          CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
+          EOF
+          
+          echo "Temporary backend application created successfully"
+      
+      - name: Build, tag, and push backend image to ECR
+        working-directory: ./temp-backend-app
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: backend-repo
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Build and push using Docker Buildx
+          docker buildx build \
+            --cache-from=type=local,src=/tmp/.buildx-cache-backend \
+            --cache-to=type=local,dest=/tmp/.buildx-cache-backend-new,mode=max \
+            --platform linux/amd64 \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            --push \
+            .
+          
+          # Move cache to prevent growing indefinitely
+          rm -rf /tmp/.buildx-cache-backend
+          mv /tmp/.buildx-cache-backend-new /tmp/.buildx-cache-backend
+          
+          echo "Backend image pushed: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "Backend image also tagged as: $ECR_REGISTRY/$ECR_REPOSITORY:latest"
+      
+      - name: Notify success
+        if: success()
+        run: |
+          echo "✅ Backend Docker image successfully pushed to ECR"
+          echo "Repository: backend-repo"
+          echo "Tag: ${{ github.sha }}"  
