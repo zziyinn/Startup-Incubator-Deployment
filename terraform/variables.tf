@@ -10,6 +10,12 @@ variable "instance_type" {
   default     = "t2.micro"
 }
 
+variable "root_volume_size" {
+  description = "Size of the root volume in GB"
+  type        = number
+  default     = 20
+}
+
 variable "key_name" {
   description = "Name of the SSH key pair to use for EC2 instance"
   type        = string
