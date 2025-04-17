@@ -1,111 +1,85 @@
-# Startup Incubator Deployment
+# AWS Infrastructure with Terraform and GitHub Actions
 
-This project demonstrates the deployment of a startup incubator application using modern DevOps practices.
+This project sets up AWS infrastructure using Terraform and implements CI/CD with GitHub Actions for automatic deployment.
 
-## Recent Updates (April 2024)
+## Prerequisites
 
-### April 12, 2024
-- Implemented EC2 deployment with Terraform
-- Configured automatic deployment through GitHub Actions
-- Set up Docker containerization for frontend and backend
-- Added security group configurations for EC2 instance
-- Automated ECR image pulling and container deployment
-- Added EC2 deployment workflow configuration
+1. AWS Account with appropriate permissions
+2. Terraform installed locally
+3. GitHub repository
+4. SSH key pair for EC2 access
 
-### April 11, 2024
-- Created ECR repositories for frontend and backend
-- Set up GitHub Actions workflows for ECR image building
-- Implemented automated image pushing to ECR
-- Added Dockerfile configurations for both services
+## Setup Instructions
 
-### April 10, 2024
-- Initialized project structure
-- Set up basic infrastructure
-- Created deployment configurations
+### 1. Configure AWS Credentials
 
-## Project Structure
-
-```
-.
-├── .github/
-│   └── workflows/
-│       ├── frontend-ecr-pipeline.yml
-│       ├── backend-ecr-pipeline.yml
-│       └── ec2-deployment.yml
-├── terraform/
-│   └── environments/
-│       └── prod/
-│           ├── main.tf
-│           └── outputs.tf
-└── deployment/
-    ├── docker-compose.yml
-    └── nginx.conf
+Create a `.aws/credentials` file with your AWS credentials:
+```ini
+[default]
+aws_access_key_id = YOUR_ACCESS_KEY
+aws_secret_access_key = YOUR_SECRET_KEY
 ```
 
-## Features
+### 2. Set up GitHub Secrets
 
-- **Infrastructure as Code**: Using Terraform for AWS resource management
-- **CI/CD Pipeline**: Automated deployment through GitHub Actions
-- **Containerization**: Docker-based deployment for both frontend and backend
-- **Security**: Configured security groups and access controls
-- **Scalability**: Designed for easy scaling and maintenance
+Add the following secrets to your GitHub repository:
+- `AWS_ACCESS_KEY_ID`: Your AWS access key
+- `AWS_SECRET_ACCESS_KEY`: Your AWS secret key
+- `AWS_REGION`: AWS region (default: us-east-1)
+- `SSH_PRIVATE_KEY`: Your private SSH key for EC2 access
+- `EC2_PUBLIC_IP`: Will be added after EC2 instance creation
 
-## Deployment Process
+### 3. Initialize and Apply Terraform
 
-1. **Image Building**:
-   - Frontend and backend images are built and pushed to ECR
-   - Automated through GitHub Actions
+```bash
+cd terraform
+terraform init
+terraform plan
+terraform apply
+```
 
-2. **Infrastructure Deployment**:
-   - EC2 instance is created with Terraform
-   - Security groups are configured
-   - Docker is installed and configured
+After applying, note the EC2 public IP from the output and add it to GitHub secrets as `EC2_PUBLIC_IP`.
 
-3. **Application Deployment**:
-   - Images are pulled from ECR
-   - Containers are started using docker-compose
-   - Services are automatically restarted on failure
+### 4. Configure EC2 Instance
 
-## GitHub Actions Workflows
+The EC2 instance is automatically configured with Docker during creation. The security group allows:
+- SSH access (port 22)
+- HTTP access to the application (port 5000)
 
-### EC2 Deployment Workflow
-The EC2 deployment workflow (`ec2-deployment.yml`) is triggered on:
-- Push to main branch (when Terraform files change)
-- Manual trigger through workflow_dispatch
+### 5. GitHub Actions Workflow
 
-Workflow steps:
-1. Checkout code
-2. Configure AWS credentials
-3. Setup Terraform
-4. Initialize Terraform
-5. Plan infrastructure changes
-6. Apply infrastructure changes
-7. Output EC2 instance information
+The workflow (`backend-ecr-pipeline.yml`) will:
+1. Build and push Docker image to ECR
+2. SSH into EC2 instance
+3. Pull the latest image
+4. Stop and remove existing container
+5. Run the new container
 
-Required GitHub Secrets:
-- `AWS_ACCESS_KEY_ID`: AWS access key
-- `AWS_SECRET_ACCESS_KEY`: AWS secret key
+## Infrastructure Components
+
+- **ECR Repository**: Stores Docker images
+- **EC2 Instance**: Runs the application
+- **Security Group**: Controls network access
+- **SSH Key Pair**: Secure access to EC2
 
 ## Accessing the Application
 
-- **Frontend**: `http://<EC2_PUBLIC_IP>`
-- **Backend**: `http://<EC2_PUBLIC_IP>:5000`
+Once deployed, the application will be available at:
+```
+http://<EC2_PUBLIC_IP>:5000
+```
 
-## Requirements
+## Maintenance
 
-- AWS Account with appropriate permissions
-- GitHub repository with configured secrets
-- Terraform 1.0.0 or later
-- Docker and docker-compose
+To update the infrastructure:
+```bash
+cd terraform
+terraform plan
+terraform apply
+```
 
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a new Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details. 
+To destroy the infrastructure:
+```bash
+cd terraform
+terraform destroy
+``` 

@@ -8,6 +8,22 @@
 terraform.rc
 .terraform.lock.hcl
 
+# Local .terraform directories
+**/.terraform/*
+
+# SSH keys
+*.pem
+id_rsa
+id_rsa.pub
+
+# AWS credentials
+.aws/
+credentials
+
+# Environment variables
+.env
+.env.*
+
 # IDE
 .idea/
 .vscode/

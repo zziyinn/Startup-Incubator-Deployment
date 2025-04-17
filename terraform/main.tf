@@ -1,66 +1,120 @@
 terraform {
-  backend "s3" {
-    bucket = "startup-incubator-terraform-state"
-    key    = "state/ec2-state.tfstate"
-    region = "us-east-2"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
   }
 }
 
-# Provider configuration
 provider "aws" {
-  region = "us-east-2"
+  region = var.aws_region
 }
 
-# Create a security group
-resource "aws_security_group" "app" {
-  name        = "startup-incubator-sg"
-  description = "Security group for startup incubator application"
-  
-  # SSH access
+# IAM Role for EC2
+resource "aws_iam_role" "ec2_role" {
+  name = "${var.project_name}-ec2-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = merge(var.tags, {
+    Name = "${var.project_name}-ec2-role"
+  })
+}
+
+# IAM Policy for ECR access
+resource "aws_iam_role_policy" "ecr_access" {
+  name = "${var.project_name}-ecr-access"
+  role = aws_iam_role.ec2_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage"
+        ]
+        Effect   = "Allow"
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# IAM Instance Profile
+resource "aws_iam_instance_profile" "ec2_profile" {
+  name = "${var.project_name}-ec2-profile"
+  role = aws_iam_role.ec2_role.name
+}
+
+# ECR Repository
+resource "aws_ecr_repository" "backend" {
+  name                 = var.ecr_repository_name
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = merge(var.tags, {
+    Name = var.ecr_repository_name
+  })
+}
+
+# ECR Lifecycle Policy
+resource "aws_ecr_lifecycle_policy" "backend" {
+  repository = aws_ecr_repository.backend.name
+
+  policy = jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "Keep last 30 images"
+      selection = {
+        tagStatus   = "any"
+        countType   = "imageCountMoreThan"
+        countNumber = 30
+      }
+      action = {
+        type = "expire"
+      }
+    }]
+  })
+}
+
+# Security Group for EC2
+resource "aws_security_group" "ec2_sg" {
+  name        = var.security_group_name
+  description = "Security group for EC2 instance"
+  vpc_id      = var.vpc_id != "" ? var.vpc_id : null
+
   ingress {
-    description = "SSH from anywhere"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.allowed_ssh_cidr]
   }
 
-  # Frontend access
   ingress {
-    description = "HTTP on port 3000"
-    from_port   = 3000
-    to_port     = 3000
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Backend access
-  ingress {
-    description = "HTTP on port 5000"
     from_port   = 5000
     to_port     = 5000
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.allowed_http_cidr]
   }
 
-  # Additional ports for other services
-  ingress {
-    description = "HTTP on port 3001"
-    from_port   = 3001
-    to_port     = 3001
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "HTTP on port 5001"
-    from_port   = 5001
-    to_port     = 5001
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Allow all outbound traffic
   egress {
     from_port   = 0
     to_port     = 0
@@ -68,41 +122,82 @@ resource "aws_security_group" "app" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = {
-    Name = "startup-incubator-sg"
-  }
+  tags = merge(var.tags, {
+    Name = var.security_group_name
+  })
 }
 
-# Generate a key pair
-resource "aws_key_pair" "deployer" {
-  key_name   = "startup-incubator-key"
-  public_key = file("${path.module}/id_ed.pub")
+# EBS Volume
+resource "aws_ebs_volume" "app_data" {
+  availability_zone = var.availability_zone != "" ? var.availability_zone : aws_instance.app_server.availability_zone
+  size             = var.ebs_volume_size
+  type             = "gp3"
+
+  tags = merge(var.tags, {
+    Name = "${var.project_name}-data-volume"
+  })
 }
 
-# Launch EC2 instance
-resource "aws_instance" "app" {
-  ami           = "ami-0b4624933067d393a"  # Amazon Linux 2
-  instance_type = "t2.micro"
-  key_name      = aws_key_pair.deployer.key_name
+# EBS Volume Attachment
+resource "aws_volume_attachment" "ebs_att" {
+  device_name = "/dev/sdh"
+  volume_id   = aws_ebs_volume.app_data.id
+  instance_id = aws_instance.app_server.id
+}
 
-  vpc_security_group_ids = [aws_security_group.app.id]
+# EC2 Instance
+resource "aws_instance" "app_server" {
+  ami                    = var.ami_id
+  instance_type          = var.instance_type
+  vpc_security_group_ids = [aws_security_group.ec2_sg.id]
+  key_name               = var.key_name
+  subnet_id              = var.subnet_id != "" ? var.subnet_id : null
+  iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
+  availability_zone      = var.availability_zone != "" ? var.availability_zone : null
 
-  root_block_device {
-    volume_size = 20  # Set the root volume size to 20GB
-  }
-
-  # User data script for installing Docker and Docker Compose
   user_data = <<-EOF
               #!/bin/bash
-              yum update -y
-              amazon-linux-extras install docker
-              service docker start
-              usermod -a -G docker ec2-user
-              curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-              chmod +x /usr/local/bin/docker-compose
+              sudo apt-get update
+              sudo apt-get install -y docker.io
+              sudo systemctl start docker
+              sudo systemctl enable docker
+              sudo usermod -aG docker ubuntu
+              
+              # Mount EBS volume
+              sudo mkfs -t ext4 /dev/sdh
+              sudo mkdir -p /data
+              sudo mount /dev/sdh /data
+              echo '/dev/sdh /data ext4 defaults,nofail 0 2' | sudo tee -a /etc/fstab
               EOF
 
-  tags = {
-    Name = "startup-incubator-app"
-  }
+  tags = merge(var.tags, {
+    Name = "${var.project_name}-app-server"
+  })
 }
+
+# SSH Key Pair
+resource "aws_key_pair" "deployer" {
+  key_name   = var.key_name
+  public_key = file("~/.ssh/id_rsa.pub")
+
+  tags = merge(var.tags, {
+    Name = var.key_name
+  })
+}
+
+# Outputs
+output "ec2_public_ip" {
+  value = aws_instance.app_server.public_ip
+}
+
+output "ecr_repository_url" {
+  value = aws_ecr_repository.backend.repository_url
+}
+
+output "ec2_instance_id" {
+  value = aws_instance.app_server.id
+}
+
+output "security_group_id" {
+  value = aws_security_group.ec2_sg.id
+} 

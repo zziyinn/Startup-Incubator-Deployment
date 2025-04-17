@@ -123,9 +123,56 @@ jobs:
           echo "Backend image pushed: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           echo "Backend image also tagged as: $ECR_REGISTRY/$ECR_REPOSITORY:latest"
       
+      - name: Deploy to EC2
+        run: |
+          # Install SSH key
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # Login to ECR on EC2 and pull the latest image
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+            docker pull ${{ steps.login-ecr.outputs.registry }}/backend-repo:latest
+            
+            # Stop and remove existing container if it exists
+            docker stop backend-app || true
+            docker rm backend-app || true
+            
+            # Run new container
+            docker run -d \
+              --name backend-app \
+              -p 5000:5000 \
+              ${{ steps.login-ecr.outputs.registry }}/backend-repo:latest
+          EOF
+      
       - name: Notify success
         if: success()
         run: |
-          echo "✅ Backend Docker image successfully pushed to ECR"
+          echo "✅ Backend Docker image successfully pushed to ECR and deployed to EC2"
           echo "Repository: backend-repo"
-          echo "Tag: ${{ github.sha }}"  
+          echo "Tag: ${{ github.sha }}"
+      
+      - name: Health Check
+        run: |
+          for i in {1..5}; do
+            if curl -s http://${{ secrets.EC2_PUBLIC_IP }}:5000/health | grep -q "healthy"; then
+              echo "Application is healthy"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Health check failed"
+          exit 1
+      
+      - name: Rollback if needed
+        if: failure()
+        run: |
+          ssh ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
+            docker stop backend-app || true
+            docker rm backend-app || true
+            docker run -d \
+              --name backend-app \
+              -p 5000:5000 \
+              ${{ steps.login-ecr.outputs.registry }}/backend-repo:previous
+          EOF
