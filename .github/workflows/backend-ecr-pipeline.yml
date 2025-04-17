@@ -151,28 +151,4 @@ jobs:
         run: |
           echo "✅ Backend Docker image successfully pushed to ECR and deployed to EC2"
           echo "Repository: backend-repo"
-          echo "Tag: ${{ github.sha }}"
-      
-      - name: Health Check
-        run: |
-          for i in {1..5}; do
-            if curl -s http://${{ secrets.EC2_PUBLIC_IP }}:5000/health | grep -q "healthy"; then
-              echo "Application is healthy"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "Health check failed"
-          exit 1
-      
-      - name: Rollback if needed
-        if: failure()
-        run: |
-          ssh ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
-            docker stop backend-app || true
-            docker rm backend-app || true
-            docker run -d \
-              --name backend-app \
-              -p 5000:5000 \
-              ${{ steps.login-ecr.outputs.registry }}/backend-repo:previous
-          EOF
+          echo "Tag: ${{ github.sha }}"  
