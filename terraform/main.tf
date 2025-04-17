@@ -130,8 +130,8 @@ resource "aws_security_group" "ec2_sg" {
 # EBS Volume
 resource "aws_ebs_volume" "app_data" {
   availability_zone = var.availability_zone != "" ? var.availability_zone : aws_instance.app_server.availability_zone
-  size             = var.ebs_volume_size
-  type             = "gp3"
+  size              = var.ebs_volume_size
+  type              = "gp3"
 
   tags = merge(var.tags, {
     Name = "${var.project_name}-data-volume"
