@@ -46,9 +46,27 @@ jobs:
         working-directory: ./terraform
         run: terraform apply -auto-approve tfplan
       
+      - name: Get ECS Service Status
+        working-directory: ./terraform
+        run: |
+          echo "ECS Services Status:"
+          aws ecs describe-services \
+            --cluster $(terraform output -raw project_name)-cluster \
+            --services $(terraform output -raw project_name)-frontend-service $(terraform output -raw project_name)-backend-service \
+            --query 'services[*].[serviceName,runningCount,desiredCount,status]' \
+            --output table
+      
+      - name: Get Load Balancer DNS
+        working-directory: ./terraform
+        run: |
+          echo "Application URLs:"
+          echo "Frontend: $(terraform output -raw frontend_url)"
+          echo "Backend: $(terraform output -raw backend_url)"
+      
       - name: Notify success
         if: success()
         run: |
           echo "✅ Infrastructure successfully deployed with Terraform"
-          echo "Frontend ECR Image: ${{ github.event.workflow_run.head_sha }}"
-          echo "Backend ECR Image: ${{ github.event.workflow_run.head_sha }}" 
+          echo "Deployment completed at $(date)"
+          echo "Check the ECS services status above for running tasks"
+          echo "Access the application using the URLs provided above" 

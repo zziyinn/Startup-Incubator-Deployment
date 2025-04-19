@@ -81,10 +81,10 @@ resource "aws_ecs_cluster" "main" {
 # ECS Task Definition - Frontend
 resource "aws_ecs_task_definition" "frontend" {
   family                   = "${var.project_name}-frontend"
-  network_mode             = "awsvpc"
+  network_mode            = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = 256
-  memory                   = 512
+  cpu                     = 256
+  memory                  = 512
 
   container_definitions = jsonencode([
     {
@@ -98,6 +98,14 @@ resource "aws_ecs_task_definition" "frontend" {
           protocol      = "tcp"
         }
       ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = "/ecs/${var.project_name}-frontend"
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
     }
   ])
 
@@ -107,10 +115,10 @@ resource "aws_ecs_task_definition" "frontend" {
 # ECS Task Definition - Backend
 resource "aws_ecs_task_definition" "backend" {
   family                   = "${var.project_name}-backend"
-  network_mode             = "awsvpc"
+  network_mode            = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = 256
-  memory                   = 512
+  cpu                     = 256
+  memory                  = 512
 
   container_definitions = jsonencode([
     {
@@ -124,6 +132,14 @@ resource "aws_ecs_task_definition" "backend" {
           protocol      = "tcp"
         }
       ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = "/ecs/${var.project_name}-backend"
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
     }
   ])
 
@@ -137,6 +153,7 @@ resource "aws_ecs_service" "frontend" {
   task_definition = aws_ecs_task_definition.frontend.arn
   desired_count   = 2
   launch_type     = "FARGATE"
+  force_new_deployment = true
 
   network_configuration {
     subnets          = aws_subnet.public[*].id
@@ -160,6 +177,7 @@ resource "aws_ecs_service" "backend" {
   task_definition = aws_ecs_task_definition.backend.arn
   desired_count   = 2
   launch_type     = "FARGATE"
+  force_new_deployment = true
 
   network_configuration {
     subnets          = aws_subnet.public[*].id
@@ -330,6 +348,19 @@ resource "aws_ecr_repository" "backend" {
 # Data Sources
 data "aws_availability_zones" "available" {
   state = "available"
+}
+
+# CloudWatch Log Groups
+resource "aws_cloudwatch_log_group" "frontend" {
+  name              = "/ecs/${var.project_name}-frontend"
+  retention_in_days = 30
+  tags              = var.tags
+}
+
+resource "aws_cloudwatch_log_group" "backend" {
+  name              = "/ecs/${var.project_name}-backend"
+  retention_in_days = 30
+  tags              = var.tags
 }
 
 # Outputs
