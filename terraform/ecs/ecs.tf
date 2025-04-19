@@ -96,9 +96,9 @@ resource "aws_ecs_service" "frontend" {
   force_new_deployment = true
 
   network_configuration {
-    subnets          = aws_subnet.public[*].id
-    security_groups  = [aws_security_group.ecs_tasks.id]
-    assign_public_ip = true
+    subnets          = aws_subnet.private[*].id
+    security_groups  = [aws_security_group.ecs.id]
+    assign_public_ip = false
   }
 
   load_balancer {
@@ -124,9 +124,9 @@ resource "aws_ecs_service" "backend" {
   force_new_deployment = true
 
   network_configuration {
-    subnets          = aws_subnet.public[*].id
-    security_groups  = [aws_security_group.ecs_tasks.id]
-    assign_public_ip = true
+    subnets          = aws_subnet.private[*].id
+    security_groups  = [aws_security_group.ecs.id]
+    assign_public_ip = false
   }
 
   load_balancer {
