@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "ami_id" {
   description = "AMI ID for the EC2 instance"
   type        = string
-  default     = "ami-0c7217cdde317cfec"  # Ubuntu 22.04 LTS
+  default     = "ami-0c7217cdde317cfec" # Ubuntu 22.04 LTS
 }
 
 variable "instance_type" {
@@ -19,19 +19,19 @@ variable "instance_type" {
 variable "availability_zone" {
   description = "Availability zone for the EC2 instance"
   type        = string
-  default     = ""  # 默认使用默认可用区
+  default     = "" # Default to using default availability zone
 }
 
 variable "vpc_id" {
   description = "VPC ID where the EC2 instance will be launched"
   type        = string
-  default     = ""  # 默认使用默认 VPC
+  default     = "" # Default to using default VPC
 }
 
 variable "subnet_id" {
   description = "Subnet ID where the EC2 instance will be launched"
   type        = string
-  default     = ""  # 默认使用默认子网
+  default     = "" # Default to using default subnet
 }
 
 variable "key_name" {
@@ -43,13 +43,13 @@ variable "key_name" {
 variable "public_key" {
   description = "Public key for SSH access"
   type        = string
-  default     = ""  # 需要提供实际的公钥
+  default     = "" # Provide actual public key
 }
 
 variable "allowed_ssh_cidr" {
   description = "CIDR block allowed to SSH into the EC2 instance"
   type        = string
-  default     = "0.0.0.0/0"  # 建议修改为你的 IP
+  default     = "0.0.0.0/0" # Recommended to change to your IP
 }
 
 variable "allowed_http_cidr" {
@@ -139,7 +139,7 @@ variable "backend_desired_count" {
 variable "tags" {
   description = "Common tags for all resources"
   type        = map(string)
-  default     = {
+  default = {
     Environment = "dev"
     Project     = "startup-incubator"
     ManagedBy   = "terraform"
