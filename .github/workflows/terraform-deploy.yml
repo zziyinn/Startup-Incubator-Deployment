@@ -1,16 +1,17 @@
 name: Terraform Infrastructure Deployment
 
 on:
-  workflow_run:
-    workflows: ["Frontend ECR Pipeline", "Backend ECR Pipeline"]
-    types:
-      - completed
+  push:
+    branches: [ main ]
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-deploy.yml'
+  workflow_dispatch:
 
 jobs:
   deploy-infrastructure:
     name: Deploy Infrastructure with Terraform
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     
     steps:
       - name: Checkout code
@@ -31,23 +32,47 @@ jobs:
           terraform_version: "1.5.0"
       
       - name: Terraform Init
-        working-directory: ./terraform
-        run: terraform init
+        working-directory: ./terraform/ecs
+        run: |
+          terraform init
+          terraform get
       
       - name: Terraform Format
-        working-directory: ./terraform
-        run: terraform fmt -check
+        working-directory: ./terraform/ecs
+        run: |
+          terraform fmt -check
+          terraform validate
       
       - name: Terraform Plan
-        working-directory: ./terraform
-        run: terraform plan -out=tfplan
+        working-directory: ./terraform/ecs
+        run: |
+          terraform plan -out=tfplan
+          terraform show -json tfplan > tfplan.json
       
       - name: Terraform Apply
-        working-directory: ./terraform
+        working-directory: ./terraform/ecs
         run: terraform apply -auto-approve tfplan
       
-      - name: Get ECS Service Status
-        working-directory: ./terraform
+      - name: Verify VPC Configuration
+        working-directory: ./terraform/ecs
+        run: |
+          echo "VPC Configuration:"
+          aws ec2 describe-vpcs \
+            --filters "Name=tag:Name,Values=${var.project_name}-vpc" \
+            --query 'Vpcs[*].[VpcId,CidrBlock,State]' \
+            --output table
+      
+      - name: Verify ECS Cluster
+        working-directory: ./terraform/ecs
+        run: |
+          echo "ECS Cluster Status:"
+          aws ecs describe-clusters \
+            --clusters $(terraform output -raw project_name)-cluster \
+            --query 'clusters[*].[clusterName,status,registeredContainerInstancesCount,runningTasksCount]' \
+            --output table
+      
+      - name: Verify ECS Services
+        working-directory: ./terraform/ecs
         run: |
           echo "ECS Services Status:"
           aws ecs describe-services \
@@ -56,17 +81,30 @@ jobs:
             --query 'services[*].[serviceName,runningCount,desiredCount,status]' \
             --output table
       
-      - name: Get Load Balancer DNS
-        working-directory: ./terraform
+      - name: Verify Load Balancer
+        working-directory: ./terraform/ecs
         run: |
-          echo "Application URLs:"
-          echo "Frontend: $(terraform output -raw frontend_url)"
-          echo "Backend: $(terraform output -raw backend_url)"
+          echo "Load Balancer Status:"
+          aws elbv2 describe-load-balancers \
+            --names $(terraform output -raw project_name)-alb \
+            --query 'LoadBalancers[*].[LoadBalancerName,DNSName,State]' \
+            --output table
+      
+      - name: Verify Auto Scaling
+        working-directory: ./terraform/ecs
+        run: |
+          echo "Auto Scaling Status:"
+          aws autoscaling describe-auto-scaling-groups \
+            --auto-scaling-group-names $(terraform output -raw project_name)-asg \
+            --query 'AutoScalingGroups[*].[AutoScalingGroupName,DesiredCapacity,MinSize,MaxSize]' \
+            --output table
       
       - name: Notify success
         if: success()
         run: |
           echo "✅ Infrastructure successfully deployed with Terraform"
           echo "Deployment completed at $(date)"
-          echo "Check the ECS services status above for running tasks"
-          echo "Access the application using the URLs provided above" 
+          echo "Check the verification steps above for detailed status"
+          echo "Application URLs:"
+          echo "Frontend: $(terraform output -raw frontend_url)"
+          echo "Backend: $(terraform output -raw backend_url)" 
