@@ -15,11 +15,11 @@ resource "aws_ecs_cluster" "main" {
 # Frontend Task Definition
 resource "aws_ecs_task_definition" "frontend" {
   family                   = "${var.project_name}-frontend"
-  network_mode            = "awsvpc"
+  network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                     = var.frontend_cpu
-  memory                  = var.frontend_memory
-  execution_role_arn      = aws_iam_role.ecs_task_execution_role.arn
+  cpu                      = var.frontend_cpu
+  memory                   = var.frontend_memory
+  execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
 
   container_definitions = jsonencode([
     {
@@ -52,11 +52,11 @@ resource "aws_ecs_task_definition" "frontend" {
 # Backend Task Definition
 resource "aws_ecs_task_definition" "backend" {
   family                   = "${var.project_name}-backend"
-  network_mode            = "awsvpc"
+  network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                     = var.backend_cpu
-  memory                  = var.backend_memory
-  execution_role_arn      = aws_iam_role.ecs_task_execution_role.arn
+  cpu                      = var.backend_cpu
+  memory                   = var.backend_memory
+  execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
 
   container_definitions = jsonencode([
     {
@@ -88,11 +88,11 @@ resource "aws_ecs_task_definition" "backend" {
 
 # Frontend Service
 resource "aws_ecs_service" "frontend" {
-  name            = "${var.project_name}-frontend-service"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.frontend.arn
-  desired_count   = var.desired_count
-  launch_type     = "FARGATE"
+  name                 = "${var.project_name}-frontend-service"
+  cluster              = aws_ecs_cluster.main.id
+  task_definition      = aws_ecs_task_definition.frontend.arn
+  desired_count        = var.desired_count
+  launch_type          = "FARGATE"
   force_new_deployment = true
 
   network_configuration {
@@ -116,11 +116,11 @@ resource "aws_ecs_service" "frontend" {
 
 # Backend Service
 resource "aws_ecs_service" "backend" {
-  name            = "${var.project_name}-backend-service"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.backend.arn
-  desired_count   = var.desired_count
-  launch_type     = "FARGATE"
+  name                 = "${var.project_name}-backend-service"
+  cluster              = aws_ecs_cluster.main.id
+  task_definition      = aws_ecs_task_definition.backend.arn
+  desired_count        = var.desired_count
+  launch_type          = "FARGATE"
   force_new_deployment = true
 
   network_configuration {
