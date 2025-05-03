@@ -1,0 +1,6 @@
+[submodule "frontend"]
+	path = frontend
+	url = https://github.com/enochhz/founder-bot.git
+[submodule "backend"]
+	path = backend
+	url = https://github.com/Light1121/founder-bot-backend.git
